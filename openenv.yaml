@@ -1,0 +1,111 @@
+name: venturex
+version: 1.0.0
+description: "VentureX - AI-powered business simulation environment. Test startup ideas in a day-by-day simulated economy with real-world scenarios."
+author: "VentureX Team"
+
+environment:
+  type: simulation
+  category: business-strategy
+
+endpoints:
+  reset:
+    method: POST
+    path: /reset
+    description: "Initialize a new simulation episode"
+    response_model: Observation
+
+  step:
+    method: POST
+    path: /step
+    description: "Execute a business decision and advance one day"
+    request_model: Action
+    response_model: StepResult
+
+  state:
+    method: GET
+    path: /state
+    description: "Get current simulation state without advancing"
+    response_model: Observation
+
+models:
+  Action:
+    type: object
+    properties:
+      action_type:
+        type: string
+        enum: [allocate_budget, hire, set_price, launch_product, raise_funding, pivot, expand_market, cut_costs, invest_rd, run_marketing_campaign]
+      department:
+        type: string
+        enum: [marketing, finance, operations, hr, product, executive]
+      parameters:
+        type: object
+        description: "Action-specific parameters (amount, target, etc.)"
+      reasoning:
+        type: string
+        description: "Agent's reasoning for this decision"
+
+  Observation:
+    type: object
+    properties:
+      day:
+        type: integer
+      stage:
+        type: string
+      cash:
+        type: number
+      revenue:
+        type: number
+      expenses:
+        type: number
+      market_share:
+        type: number
+      customer_satisfaction:
+        type: number
+      employee_count:
+        type: integer
+      burn_rate:
+        type: number
+      active_events:
+        type: array
+      available_actions:
+        type: array
+      daily_log:
+        type: array
+
+  StepResult:
+    type: object
+    properties:
+      observation:
+        $ref: "#/models/Observation"
+      reward:
+        type: number
+        minimum: 0.0
+        maximum: 1.0
+      terminated:
+        type: boolean
+      truncated:
+        type: boolean
+      info:
+        type: object
+
+tasks:
+  - name: grow_startup
+    description: "Grow a startup from IDEA stage to SCALE stage within 90 simulated days"
+    max_steps: 90
+
+  - name: survive_downturn
+    description: "Survive an economic downturn — maintain positive cash flow for 60 days"
+    max_steps: 60
+
+  - name: reach_profitability
+    description: "Reach $1M revenue with >15% profit margin within 90 days"
+    max_steps: 90
+
+  - name: market_expansion
+    description: "Expand market share from 5% to 25% within 90 days"
+    max_steps: 90
+
+runtime:
+  max_inference_time_minutes: 20
+  vcpu: 2
+  memory_gb: 8
