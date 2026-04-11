@@ -6,7 +6,7 @@ MANDATORY
 - Before submitting, ensure the following variables are defined in your environment configuration:
     API_BASE_URL   The API endpoint for the LLM.
     MODEL_NAME     The model identifier to use for inference.
-    HF_TOKEN       Your Hugging Face / API key.
+    OPENAI_API_KEY Your API key (or HF_TOKEN).
     LOCAL_IMAGE_NAME The name of the local image to use for the environment if you are using from_docker_image()
 
 - The inference script must be named `inference.py` and placed in the root directory of the project
@@ -16,7 +16,7 @@ STDOUT FORMAT
 - The script emits exactly three line types to stdout:
     [START] task=<task_name> env=<benchmark> model=<model_name>
     [STEP]  step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>
-    [END]   success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
+    [END]   task=<task_name> success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
 """
 
 import asyncio
@@ -34,11 +34,12 @@ from venturex_env import VentureXEnvClient, VentureXAction, VentureXObservation
 #  CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════
 IMAGE_NAME = os.getenv("IMAGE_NAME")  # If using docker image
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://api-inference.huggingface.co/models"
-MODEL_NAME = os.getenv("MODEL_NAME") or "mistralai/Mistral-7B-Instruct-v0.2"
+ENV_URL = os.getenv("ENV_URL") or "http://localhost:7860" # Built-in default execution port for testing
+API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("HF_TOKEN") or os.getenv("API_KEY") or "invalid_key"
+API_BASE_URL = os.getenv("API_BASE_URL") or os.getenv("OPENAI_BASE_URL") 
+MODEL_NAME = os.getenv("MODEL_NAME") or "gpt-4o-mini"
 BENCHMARK = os.getenv("VENTUREX_BENCHMARK", "venturex")
-MAX_STEPS = 90
+MAX_STEPS = 50
 TEMPERATURE = 0.7
 MAX_TOKENS = 300
 
@@ -97,10 +98,10 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(task: str, success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
+        f"[END] task={task} success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
         flush=True,
     )
 
@@ -211,13 +212,19 @@ async def run_task(task_name: str, task_description: str, max_steps: int) -> flo
         "market_expansion": MarketExpansionGrader(),
     }
 
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    if API_BASE_URL:
+        client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    else:
+        client = OpenAI(api_key=API_KEY)
 
     # Create environment (Docker or local)
-    if IMAGE_NAME:
+    if os.getenv("OPENENV_VALIDATION") or os.getenv("ENV_URL"):
+        env = await VentureXEnvClient.from_http(ENV_URL, task_name=task_name)
+    elif IMAGE_NAME:
         env = await VentureXEnvClient.from_docker_image(IMAGE_NAME, task_name=task_name)
     else:
-        env = await VentureXEnvClient.from_local(task_name=task_name)
+        env = await VentureXEnvClient.from_http(ENV_URL, task_name=task_name)
+
 
     history: List[str] = []
     rewards: List[float] = []
@@ -285,7 +292,7 @@ async def run_task(task_name: str, task_description: str, max_steps: int) -> flo
         except Exception as e:
             print(f"[DEBUG] env.close() error: {e}", flush=True)
 
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_end(task=task_name, success=success, steps=steps_taken, score=score, rewards=rewards)
 
     return score
 
@@ -295,28 +302,35 @@ async def run_task(task_name: str, task_description: str, max_steps: int) -> flo
 # ═══════════════════════════════════════════════════════════════════════════
 async def main() -> None:
     """Run all tasks and report results."""
-    from tasks import ALL_TASKS
+    try:
+        from tasks import ALL_TASKS
 
-    all_scores = {}
+        all_scores = {}
 
-    for task_name in TASK_NAMES:
-        task_config = ALL_TASKS.get(task_name)
-        if not task_config:
-            print(f"[DEBUG] Task {task_name} not found, skipping", flush=True)
-            continue
+        for task_name in TASK_NAMES:
+            task_config = ALL_TASKS.get(task_name)
+            if not task_config:
+                print(f"[DEBUG] Task {task_name} not found, skipping", flush=True)
+                continue
 
-        score = await run_task(
-            task_name=task_name,
-            task_description=task_config.description,
-            max_steps=task_config.max_days,
-        )
-        all_scores[task_name] = score
+            score = await run_task(
+                task_name=task_name,
+                task_description=task_config.description,
+                max_steps=task_config.max_days,
+            )
+            all_scores[task_name] = score
 
-    # Summary (not part of required format, but helpful for debugging)
-    if all_scores:
-        avg = sum(all_scores.values()) / len(all_scores)
-        print(f"\n[SUMMARY] average_score={avg:.2f} tasks={len(all_scores)}", flush=True)
+        if all_scores:
+            avg = sum(all_scores.values()) / max(len(all_scores), 1)
+            print(f"\n[SUMMARY] average_score={avg:.2f} tasks={len(all_scores)}", flush=True)
+    except Exception as e:
+        print(f"[CRITICAL ERROR] Execution failed: {e}", flush=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        print(f"Top level unhandled exception: {e}")
+        sys.exit(1)

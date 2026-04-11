@@ -1,12 +1,12 @@
 [project]
 name = "venturex"
-version = "0.1.0"
-description = "AI-powered business simulation platform with multiplayer, analytics, and startup ecosystem"
+version = "1.0.0"
+description = "VentureX - AI-powered business simulation environment for OpenEnv. with multiplayer, analytics, and startup ecosystem"
 authors = [
     { name = "PASAM NUTAN" }
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 dependencies = [
     # Core Backend
@@ -35,7 +35,14 @@ dependencies = [
 
     # Async tasks (for simulation engine, scenarios)
     "celery>=5.3.0",
-    "redis>=5.0.0"
+    "redis>=5.0.0",
+
+    # OpenEnv integration
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "httpx",
+    "openenv-core>=0.2.0"
 ]
 
 [build-system]
@@ -44,3 +51,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["."]
+
+[project.scripts]
+server = "server.app:main"

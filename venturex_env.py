@@ -157,6 +157,24 @@ class VentureXEnvClient:
         return client
 
     @classmethod
+    async def from_http(cls, base_url: str, task_name: str = "grow_startup") -> "VentureXEnvClient":
+        """Connect to an already running environment over HTTP."""
+        client = cls(mode="http", base_url=base_url, task_name=task_name)
+        client._http = httpx.AsyncClient(base_url=client.base_url, timeout=30.0)
+        
+        # Wait for server to be ready
+        for _ in range(30):
+            try:
+                resp = await client._http.get("/health")
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+            
+        return client
+
+    @classmethod
     async def from_local(cls, task_name: str = "grow_startup") -> "VentureXEnvClient":
         """Create environment running locally (in-process, no Docker)."""
         client = cls(mode="local", task_name=task_name)
@@ -174,9 +192,14 @@ class VentureXEnvClient:
                 done=False,
             )
         else:
-            resp = await self._http.post("/reset", params={"task_name": self.task_name})
-            resp.raise_for_status()
-            data = resp.json()
+            try:
+                resp = await self._http.post("/reset", json={"task_name": self.task_name})
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                print(f"[DEBUG] HTTP /reset failed: {e}")
+                data = {}
+                
             return VentureXResult(
                 observation=VentureXObservation.from_dict(data),
                 reward=0.0,
@@ -195,9 +218,14 @@ class VentureXEnvClient:
                 last_action_error=result.info.get("termination_reason"),
             )
         else:
-            resp = await self._http.post("/step", json=action.to_dict())
-            resp.raise_for_status()
-            data = resp.json()
+            try:
+                resp = await self._http.post("/step", json=action.to_dict())
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                print(f"[DEBUG] HTTP /step failed: {e}")
+                data = {"observation": {}, "reward": 0.0, "terminated": True}
+                
             obs_data = data.get("observation", {})
             terminated = data.get("terminated", False)
             truncated = data.get("truncated", False)

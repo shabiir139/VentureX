@@ -81,8 +81,13 @@ async def list_tasks():
     }
 
 
+from pydantic import BaseModel
+
+class ResetRequest(BaseModel):
+    task_name: str | None = None
+
 @app.post("/reset", response_model=Observation)
-async def reset(task_name: str | None = None):
+async def reset(request: ResetRequest | None = None):
     """
     Initialize a new simulation episode.
     Optionally specify a task_name to configure for a specific graded task.
@@ -90,13 +95,13 @@ async def reset(task_name: str | None = None):
     global _env
 
     task_config = None
-    if task_name:
-        if task_name not in ALL_TASKS:
+    if request and request.task_name:
+        if request.task_name not in ALL_TASKS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unknown task: {task_name}. Available: {list(ALL_TASKS.keys())}",
+                detail=f"Unknown task: {request.task_name}. Available: {list(ALL_TASKS.keys())}",
             )
-        task_config = ALL_TASKS[task_name]
+        task_config = ALL_TASKS[request.task_name]
 
     _env = VentureXEnv(task_config=task_config)
     observation = _env.reset()
@@ -129,9 +134,12 @@ async def get_score():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  MAIN
+#  MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════
-if __name__ == "__main__":
+def main():
     import uvicorn
     port = int(os.environ.get("PORT", 7860))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run("server.app:app", host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    main()
