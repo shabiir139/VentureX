@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import time
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -197,7 +198,7 @@ class VentureXEnvClient:
                 resp.raise_for_status()
                 data = resp.json()
             except Exception as e:
-                print(f"[DEBUG] HTTP /reset failed: {e}")
+                print(f"[DEBUG] HTTP /reset failed: {e}", file=sys.stderr, flush=True)
                 data = {}
                 
             return VentureXResult(
@@ -223,7 +224,7 @@ class VentureXEnvClient:
                 resp.raise_for_status()
                 data = resp.json()
             except Exception as e:
-                print(f"[DEBUG] HTTP /step failed: {e}")
+                print(f"[DEBUG] HTTP /step failed: {e}", file=sys.stderr, flush=True)
                 data = {"observation": {}, "reward": 0.0, "terminated": True}
                 
             obs_data = data.get("observation", {})
